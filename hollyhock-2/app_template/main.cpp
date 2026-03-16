@@ -22,7 +22,7 @@ void initChip8() {
   
   hw.mem = malloc(4096);
   hw.mem_size = 4096;
-  memset(hw.mem, 0, hw.men_size);
+  memset(hw.mem, 0, hw.mem_size);
   
   hw.display = malloc(32 * 64);
   hw.display_size = 32 * 64;
