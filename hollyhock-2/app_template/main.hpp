@@ -4,6 +4,30 @@
 #include <stddef.h>
 #include <sdk/os/gui.hpp>
 
+class ROMLoader : public GUIDialog {
+public:
+    int selectedROM;
+
+    ROMLoader();
+
+    virtual int OnEvent(GUIDialog_Wrapped *dialog, GUIDialog_OnEvent_Data *event) {
+        if (event->GetEventID() == ROM_MENU_EVENT_ID && (event->type & 0xF) == 0xD) {
+            selectedROM = event->data;
+        }
+
+        return GUIDialog::OnEvent(dialog, event);
+    }
+
+private:
+    const uint16_t ROM_MENU_EVENT_ID = 1;
+	GUIDropDownMenu romMenu;
+	const uint16_t LOAD_BTN_EVENT_ID = GUIDialog::DialogResultOK;
+	GUIButton loadBtn;
+	const uint16_t CANCEL_BTN_EVENT_ID = GUIDialog::DialogResultCancel;
+	GUIButton cancelBtn;
+};
+
+
 class Chip8 {
 public:
     Chip8();

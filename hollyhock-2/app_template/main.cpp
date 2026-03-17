@@ -12,6 +12,46 @@ APP_DESCRIPTION("A simple CHIP-8 Emulator")
 APP_AUTHOR("FriedrichOsDev")
 APP_VERSION("1.0.0")
 
+ROMLoader::ROMLoader() : GUIDialog(
+	GUIDialog::Height35,
+	GUIDialog::AlignCenter,
+	"Select ROM",
+	GUIDialog::KeyboardStateNone
+), romMenu(
+	GetLeftX() + 10,
+	GetTopY() + 10,
+	GetRightX() - 10,
+	GetBottomY() - 10,
+	ROM_MENU_EVENT_ID
+), loadBtn(
+	GetLeftX() + 10,
+	GetTopY() + 45,
+	GetLeftX() + 10 + 100,
+	GetBottomY() - 10,
+	"Load",
+	LOAD_BTN_EVENT_ID
+), cancelBtn(
+	GetRightX() - 10 - 100,
+	GetTopY() + 45,
+	GetRightX() - 10,
+	GetBottomY() - 10,
+	"Cancel",
+	CANCEL_BTN_EVENT_ID
+) {
+	selectedROM = 1;
+
+	romMenu.AddMenuItem(*(new GUIDropDownMenuItem("Test 1", 1, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft)));
+	romMenu.AddMenuItem(*(new GUIDropDownMenuItem("Test 2", 2, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft)));
+	romMenu.AddMenuItem(*(new GUIDropDownMenuItem("Test 3", 3, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft)));
+	romMenu.AddMenuItem(*(new GUIDropDownMenuItem("Test 4", 4, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft)));
+
+	romMenu.SetScrollBarVisibility(GUIDropDownMenu::ScrollBarVisibleWhenRequired);
+
+	AddElement(romMenu);
+	AddElement(loadBtn);
+	AddElement(cancelBtn);
+}
+
 Chip8::Chip8() {
 	for (int i = 0; i < 16; i++) {
 		v[i] = 0;
@@ -61,55 +101,16 @@ extern "C"
 void main() {
 	calcInit(); // backup screen and init some variables
 
-	// load ROM Dialog
-	GUIDialog loadROMDialog(
-		GUIDialog::Height35,
-		GUIDialog::AlignCenter,
-		"Select ROM",
-		GUIDialog::KeyboardStateNone
-	);
+	ROMLoader loader;
 
-	const uint16_t ROM_MENU_EVENT_ID = 1;
-	GUIDropDownMenu romMenu(
-		loadROMDialog.GetLeftX() + 10,
-		loadROMDialog.GetTopY() + 10,
-		loadROMDialog.GetRightX() - 10,
-		loadROMDialog.GetBottomY() - 10,
-		ROM_MENU_EVENT_ID
-	);
-
-	const uint16_t LOAD_BTN_EVENT_ID = GUIDialog::DialogResultOK;
-	GUIButton loadBtn(
-		loadROMDialog.GetLeftX() + 10,
-		loadROMDialog.GetTopY() + 45,
-		loadROMDialog.GetLeftX() + 10 + 100,
-		loadROMDialog.GetBottomY() - 10,
-		"Load",
-		LOAD_BTN_EVENT_ID
-	);
-
-	const uint16_t CANCEL_BTN_EVENT_ID = GUIDialog::DialogResultCancel;
-	GUIButton cancelBtn(
-		loadROMDialog.GetRightX() - 10 - 100,
-		loadROMDialog.GetTopY() + 45,
-		loadROMDialog.GetRightX() - 10,
-		loadROMDialog.GetBottomY() - 10,
-		"Cancel",
-		CANCEL_BTN_EVENT_ID
-	);
-
-	loadROMDialog.AddElement(romMenu);
-	loadROMDialog.AddElement(loadBtn);
-	loadROMDialog.AddElement(cancelBtn);
-
-	GUIDialog::DialogResult result = loadROMDialog.ShowDialog();
+	GUIDialog::DialogResult result = loader.ShowDialog();
 
 	if (result != GUIDialog::DialogResultOK) {
 		calcEnd();
 		return;
 	}
 
-	Debug_Printf(10, 10, true, 0, "Selected Load Btn!");
+	Debug_Printf(10, 10, true, 0, "Selected ROM: %d", loader.selectedROM);
 	LCD_Refresh();
 
 	Chip8 chip8;
