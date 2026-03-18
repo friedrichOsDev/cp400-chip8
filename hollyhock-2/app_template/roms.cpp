@@ -2,6 +2,46 @@
 #include <sdk/os/mem.hpp>
 #include "roms.hpp"
 
+class File {
+public:
+	File() : m_opened(false), m_fd(-1) {
+
+	}
+
+	~File() {
+		if (m_opened) {
+			close(m_fd);
+		}
+	}
+
+	int open(const char *path, int flags) {
+		m_fd = ::open(path, flags);
+		m_opened = true;
+		return m_fd;
+	}
+
+	int getAddr(int offset, const void **addr) {
+		return ::getAddr(m_fd, offset, addr);
+	}
+
+    int getSize(uint32_t *size) {
+        struct stat stat_buffer;
+		int ret = fstat(m_fd, &stat_buffer);
+		if (ret < 0) return ret;
+
+        *size = stat_buffer.fileSize;
+        return ret;
+    }
+
+	int read(void *buf, int count) {
+		return ::read(m_fd, buf, count);
+	}
+
+private:
+	bool m_opened;
+	int m_fd;
+};
+
 class Find {
 public:
 	Find() : m_opened(false), m_findHandle(-1) {
@@ -30,7 +70,7 @@ private:
 };
 
 namespace Roms {
-    const char ROM_FOLDER[] = "\\\\fls0\\chip8\\roms\\";
+    const char ROM_FOLDER[] = "\\fls0\\chip8\\roms\\";
     const char FILE_MASK[] = "*.ch8";
 
     romlist_t romList;
@@ -88,7 +128,44 @@ namespace Roms {
         }
     }
 
+    void freeRomList() {
+        if (romList.roms != nullptr) {
+            free(romList.roms);
+            romList.roms = nullptr;
+        }
+        romList.count = 0;
+    }
+
     romlist_t getRomList() {
         return romList;
+    }
+
+    void loadRom(const char * path, uint8_t *buffer, uint16_t max_size, uint16_t *size) {
+        File file; 
+        int ret = file.open(path, OPEN_READ);
+        if (ret < 0) {
+            *size = 0;
+            return;
+        }
+
+        uint32_t fileSize = 0;
+        ret = file.getSize(&fileSize);
+        if (ret < 0) {
+            *size = 0;
+            return;
+        }
+
+        if (fileSize > max_size) {
+            *size = 0;
+            return;
+        }
+
+        int readBytes = file.read(buffer, (int)fileSize);
+        if (readBytes < 0) {
+            *size = 0;
+            return;
+        }
+
+        *size = (uint16_t)readBytes;
     }
 }

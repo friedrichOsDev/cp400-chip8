@@ -67,9 +67,9 @@ public:
         return GUIDialog::OnEvent(dialog, event);
     }
 
-	Roms::rom_t GetSelectedROM() {
+	const Roms::rom_t * GetSelectedROM() {
 		Roms::romlist_t romList = Roms::getRomList();
-		return romList.roms[selectedROM];
+		return &romList.roms[selectedROM];
 	}
 
 private:
@@ -84,50 +84,94 @@ private:
 
 class Chip8 {
 public:
+	bool init_success;
+
     Chip8() {
-		// for (int i = 0; i < 16; i++) {
-		// 	v[i] = 0;
-		// }
-		
-		// mem = (uint8_t *)malloc(4096);
-		// mem_size = 4096;
-		// memset(mem, 0, mem_size);
-		
-		// display = (uint8_t *)malloc(64 * 32);
-		// display_size = 64 * 32;
-		// memset(display, 0, display_size);
+		init_success = true;
 
-		// for (int i = 0; i < 16; i++) {
-		// 	stack[i] = 0;
-		// }
+		for (int i = 0; i < 16; i++) {
+			registers[i] = 0;
+		}
 		
-		// sp = 0;
-		// i = 0;
-		// pc = 0x200;
-		// delay_timer = 0;
+		mem = (uint8_t *)malloc(4096);
+		mem_size = 4096;
+		if (mem != nullptr) {
+			memset(mem, 0, mem_size);
+		} else {
+			init_success = false;
+			return;
+		}		
+
+		index = 0;
+		pc = START_ADDRESS;
+
+		for (int i = 0; i < 16; i++) {
+			stack[i] = 0;
+		}
+		sp = 0;
+		
+		delay_timer = 0;
+
+		for (int i = 0; i < 16; i++) {
+			keypad[i] = 0;
+		}
+
+		display = (uint8_t *)malloc(64 * 32);
+		display_size = 64 * 32;
+		if (display != nullptr) {
+			memset(display, 0, display_size);
+		} else {
+			init_success = false;
+			return;
+		}
+
+		opcode = 0;
 	}
 
-	void loadROM(const char * filename) {
-		(void)filename;
+	void FreeMem() {
+		if (mem != nullptr) {
+			free(mem);
+			mem = nullptr;
+		}
+		if (display != nullptr) {
+			free(display);
+			display = nullptr;
+		}
 	}
 
-    void cycle() {
+	int LoadROM(const char * path) {
+		uint16_t size;
+		Roms::loadRom(path, mem + START_ADDRESS, mem_size - START_ADDRESS, &size);
+		Debug_Printf(0, 1, true, 0, "Loaded size: %d", size);
+		LCD_Refresh();
+		if (size == 0) {
+			return -1;
+		} else {
+			return 0;
+		}	
+	}
+
+    void Cycle() {
 		fetch();
 		decode();
 		execute();
 	}
 
 private:
-    uint8_t v[16]; // V0 - VF
+	const uint16_t START_ADDRESS = 0x200;
+
+    uint8_t registers[16]; // V0 - VF
     uint8_t * mem; // pointer to mem
-    size_t mem_size; // 4096
-    uint8_t * display; // pointer to display
-    size_t display_size; // 64x32 pixels
-    uint16_t stack[16]; 
-    uint16_t sp;
-    uint16_t i; // index register
+    uint16_t mem_size; // 4096
+    uint16_t index; // index register
     uint16_t pc; // program counter
+    uint16_t stack[16]; // 16-level stack
+    uint8_t sp; // stack pointer
     uint8_t delay_timer;
+	uint8_t keypad[16]; // keypad with 16 keys (1 to 9; A to F)
+    uint8_t * display; // pointer to display
+    uint16_t display_size; // 64x32 pixels
+	uint16_t opcode;
 
 	void fetch() {
 		return;
@@ -150,29 +194,61 @@ void main() {
 	GUIDialog::DialogResult result = loader.ShowDialog();
 
 	if (result != GUIDialog::DialogResultOK) {
+		Roms::freeRomList();
 		calcEnd();
 		return;
 	}
 
-	Roms::rom_t selectedROM = loader.GetSelectedROM();
-
-	Debug_Printf(0, 0, true, 0, "Loading ROM: %s", selectedROM.path);
-	LCD_Refresh();
+	const Roms::rom_t * selectedROM = loader.GetSelectedROM();
 
 	Chip8 chip8;
 
-	int ticks = 0;
-	while (true) {
-		Debug_Printf(0, 1, true, 0, "Ticks: %d", ticks);
+	if (!chip8.init_success) {
+		Roms::freeRomList();
+		chip8.FreeMem();
+		Debug_Printf(0, 10, true, 0, "Failed to initialize Chip8");
 		LCD_Refresh();
-		chip8.cycle();
+		while (true) {
+			uint32_t key1, key2;
+			getKey(&key1, &key2);
+			if (testKey(key1, key2, KEY_CLEAR)) {
+				break;
+			}
+		}
+		calcEnd();
+		return;
+	}
+
+	Debug_Printf(0, 0, true, 0, "Loading ROM: %s", selectedROM->path);
+	LCD_Refresh();
+
+	int ret = chip8.LoadROM(selectedROM->path);
+	if (ret < 0) {
+		Roms::freeRomList();
+		chip8.FreeMem();
+		Debug_Printf(0, 11, true, 0, "Failed to load ROM: %s", selectedROM->path);
+		LCD_Refresh();
+		while (true) {
+			uint32_t key1, key2;
+			getKey(&key1, &key2);
+			if (testKey(key1, key2, KEY_CLEAR)) {
+				break;
+			}
+		}
+		calcEnd();
+		return;
+	}
+
+	while (true) {
+		chip8.Cycle();
 		uint32_t key1, key2;
 		getKey(&key1, &key2);
 		if (testKey(key1, key2, KEY_CLEAR)) {
 			break;
 		}
-		ticks++;
 	}
 
+	Roms::freeRomList();
+	chip8.FreeMem();
 	calcEnd(); // restore screen and do stuff
 }
