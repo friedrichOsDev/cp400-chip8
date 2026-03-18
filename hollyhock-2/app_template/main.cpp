@@ -261,7 +261,30 @@ public:
 		return (uint8_t)(SEED & 0xFF);
 	}
 
+	void SyncWithPlatform() {
+		for (int y = 0; y < 32; y++) {
+			for (int x = 0; x < 64; x++) {
+				uint8_t pixel = display[y * 64 + x];
+				if (pixel) {
+					for (int sy = 0; sy < LCD_PIXEL_SCALE; sy++) {
+						for (int sx = 0; sx < LCD_PIXEL_SCALE; sx++) {
+							setPixel(x * LCD_PIXEL_SCALE + sx, y * LCD_PIXEL_SCALE + sy, 0);
+						}
+					}
+				} else {
+					for (int sy = 0; sy < LCD_PIXEL_SCALE; sy++) {
+						for (int sx = 0; sx < LCD_PIXEL_SCALE; sx++) {
+							setPixel(x * LCD_PIXEL_SCALE + sx, y * LCD_PIXEL_SCALE + sy, 0xFFFF);
+						}
+					}
+				}
+			}
+		}
+		LCD_Refresh();
+	}
+
 private:
+	int LCD_PIXEL_SCALE = 4;
 	uint32_t SEED = 0xACE1u;
 	const uint16_t START_ADDRESS = 0x200;
 	const uint16_t FONTSET_START_ADDRESS = 0x50;
@@ -638,6 +661,8 @@ void main() {
 		calcEnd();
 		return;
 	}
+
+	fillScreen(0x0000);
 	
 	Chip8 chip8;
 
@@ -679,6 +704,7 @@ void main() {
 		if (chip8.TestKeys() < 0) {
 			break;
 		}
+		chip8.SyncWithPlatform();
 	}
 
 	Roms::freeRomList();
