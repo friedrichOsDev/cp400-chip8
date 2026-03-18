@@ -232,6 +232,296 @@ private:
 	void execute() {
 		return;
 	}
+
+	void OP_00E0() {
+		memset(display, 0, display_size);
+	}
+
+	void OP_00EE() {
+		--sp;
+		pc = stack[sp];
+	}
+
+	void OP_1nnn() {
+		uint16_t address = opcode & 0x0FFFu;
+		pc = address;
+	}
+
+	void OP_2nnn() {
+		uint16_t address = opcode & 0x0FFFu;
+		stack[sp] = pc;
+		++sp;
+		pc = address;
+	}
+
+	void OP_3xkk() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t byte = opcode & 0x00FFu;
+		if (registers[Vx] == byte) {
+			pc += 2;
+		}
+	}
+
+	void OP_4xkk() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t byte = opcode & 0x00FFu;
+		if (registers[Vx] != byte) {
+			pc += 2;
+		}
+	}
+
+	void OP_5xy0() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		if (registers[Vx] == registers[Vy]) {
+			pc += 2;
+		}
+	}
+
+	void OP_6xkk() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t byte = opcode & 0x00FFu;
+		registers[Vx] = byte;
+	}
+
+	void OP_7xkk() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t byte = opcode & 0x00FFu;
+		registers[Vx] += byte;
+	}
+
+	void OP_8xy0() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		registers[Vx] = registers[Vy];
+	}
+
+	void OP_8xy1() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		registers[Vx] |= registers[Vy];
+	}
+
+	void OP_8xy2() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		registers[Vx] &= registers[Vy];
+	}
+
+	void OP_8xy3() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		registers[Vx] ^= registers[Vy];
+	}
+
+	void OP_8xy4() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		uint16_t sum = registers[Vx] + registers[Vy];
+
+		if (sum > 255u) {
+			registers[0xF] = 1;
+		} else {
+			registers[0xF] = 0;
+		}
+
+		registers[Vx] = sum & 0xFFu;
+	}
+
+	void OP_8xy5() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+
+		if (registers[Vx] > registers[Vy]) {
+			registers[0xF] = 1;
+		} else {
+			registers[0xF] = 0;
+		}
+
+		registers[Vx] -= registers[Vy];
+	}
+
+	void OP_8xy6() {
+		uint8_t Vx = (opcode & 0x0F000u) >> 8u;
+
+		// Save least significant bit in VF
+		registers[0xF] = (registers[Vx] & 0x1u);
+
+		registers[Vx] >>= 1;
+	}
+
+	void OP_8xy7() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+
+		if (registers[Vy] > registers[Vx]) {
+			registers[0xF] = 1;
+		} else {
+			registers[0xF] = 0;
+		}
+
+		registers[Vx] = registers[Vy] - registers[Vx];
+	}
+
+	void OP_8xyE() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+
+		// Save most significant bit in VF
+		registers[0xF] = (registers[Vx] & 0x80u) >> 7u;
+
+		registers[Vx] <<= 1;
+	}
+
+	void OP_9xy0() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+
+		if (registers[Vx] != registers[Vy]) {
+			pc += 2;
+		}
+	}
+
+	void OP_Annn() {
+		uint16_t address = opcode & 0x0FFFu;
+		index = address;
+	}
+
+	void OP_Bnnn() {
+		uint16_t address = opcode & 0x0FFFu;
+		pc = registers[0] + address;
+	}
+
+	void OP_Cxkk() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t byte = opcode & 0x00FFu;
+		registers[Vx] = GetRandByte() & byte;
+	}
+
+	void OP_Dxyn() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+		uint8_t height = opcode & 0x000Fu;
+
+		// Wrap if going beyond screen boundaries
+		uint8_t xPos = registers[Vx] % 64;
+		uint8_t yPos = registers[Vy] % 32;
+
+		registers[0xF] = 0;
+
+		for (unsigned int row = 0; row < height; row++) {
+			uint8_t spriteByte = mem[index + row];
+
+			for (unsigned int col = 0; col < 8; col++) {
+				uint8_t spritePixel = spriteByte & (0x80u >> col);
+				uint8_t *screenPixel = &display[(yPos + row) * 64 + (xPos + col)];
+
+				if (spritePixel) {
+					// Screen pixel collision
+					if (*screenPixel == 0xFF) {
+						registers[0xF] = 1;
+					}
+
+					// Effectively XOR with the sprite pixel
+					*screenPixel ^= 0xFF;
+				}
+			}
+		}
+	}
+
+	void OP_Ex9E() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t key = registers[Vx];
+
+		if (keypad[key]) {
+			pc += 2;
+		}
+	}
+
+	void OP_ExA1() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t key = registers[Vx];
+
+		if (!keypad[key]) {
+			pc += 2;
+		}
+	}
+
+	void OP_Fx07() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		registers[Vx] = delay_timer;
+	}
+
+	void OP_Fx0A() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		bool keyPressed = false;
+
+		for (uint8_t i = 0; i < 16; i++) {
+			if (keypad[i]) {
+				registers[Vx] = i;
+				keyPressed = true;
+				break;
+			}
+		}
+
+		if (!keyPressed) {
+			pc -= 2;
+		}
+	}
+
+	void OP_Fx15() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		delay_timer = registers[Vx];
+	}
+
+	void OP_Fx18() {
+		// Sound timer not implemented, but opcode handled
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		(void)Vx;
+	}
+
+	void OP_Fx1E() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		index += registers[Vx];
+	}
+
+	void OP_Fx29() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t digit = registers[Vx];
+
+		index = FONTSET_START_ADDRESS + (5 * digit);
+	}
+
+	void OP_Fx33() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+		uint8_t value = registers[Vx];
+
+		// Ones-place
+		mem[index + 2] = value % 10;
+		value /= 10;
+
+		// Tens-place
+		mem[index + 1] = value % 10;
+		value /= 10;
+
+		// Hundreds-place
+		mem[index] = value % 10;
+	}
+
+	void OP_Fx55() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+
+		for (uint8_t i = 0; i <= Vx; ++i) {
+			mem[index + i] = registers[i];
+		}
+	}
+
+	void OP_Fx65() {
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+
+		for (uint8_t i = 0; i <= Vx; ++i) {
+			registers[i] = mem[index + i];
+		}
+	}
 };
 
 const uint8_t Chip8::fontset[Chip8::FONTSET_SIZE] = {
