@@ -561,8 +561,6 @@ void main() {
 	Chip8 chip8;
 
 	if (!chip8.init_success) {
-		Roms::freeRomList();
-		chip8.FreeMem();
 		Debug_Printf(0, 10, true, 0, "Failed to initialize Chip8");
 		LCD_Refresh();
 		while (true) {
@@ -572,6 +570,8 @@ void main() {
 				break;
 			}
 		}
+		Roms::freeRomList();
+		chip8.FreeMem();
 		calcEnd();
 		return;
 	}
@@ -581,8 +581,6 @@ void main() {
 
 	int ret = chip8.LoadROM(selectedROM->path);
 	if (ret < 0) {
-		Roms::freeRomList();
-		chip8.FreeMem();
 		Debug_Printf(0, 11, true, 0, "Failed to load ROM: %s", selectedROM->path);
 		LCD_Refresh();
 		while (true) {
@@ -592,6 +590,8 @@ void main() {
 				break;
 			}
 		}
+		Roms::freeRomList();
+		chip8.FreeMem();
 		calcEnd();
 		return;
 	}
