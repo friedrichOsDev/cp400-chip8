@@ -126,6 +126,10 @@ public:
 		}
 
 		opcode = 0;
+
+		for (unsigned int i = 0; i < FONTSET_SIZE; i++) {
+			mem[FONTSET_START_ADDRESS + i] = fontset[i];
+		}
 	}
 
 	void FreeMem() {
@@ -157,8 +161,52 @@ public:
 		execute();
 	}
 
+	int TestKeys() {
+		uint32_t key1, key2;
+		getKey(&key1, &key2);
+
+		keypad[0x0] = testKey(key1, key2, KEY_7);
+		keypad[0x1] = testKey(key1, key2, KEY_8);
+		keypad[0x2] = testKey(key1, key2, KEY_9);
+		keypad[0x3] = testKey(key1, key2, KEY_MULTIPLY);
+
+		keypad[0x4] = testKey(key1, key2, KEY_4);
+		keypad[0x5] = testKey(key1, key2, KEY_5);
+		keypad[0x6] = testKey(key1, key2, KEY_6);
+		keypad[0x7] = testKey(key1, key2, KEY_SUBTRACT);
+
+		keypad[0x8] = testKey(key1, key2, KEY_1);
+		keypad[0x9] = testKey(key1, key2, KEY_2);
+		keypad[0xA] = testKey(key1, key2, KEY_3);
+		keypad[0xB] = testKey(key1, key2, KEY_ADD);
+
+		keypad[0xC] = testKey(key1, key2, KEY_0);
+		keypad[0xD] = testKey(key1, key2, KEY_DOT);
+		keypad[0xE] = testKey(key1, key2, KEY_EXP);
+		keypad[0xF] = testKey(key1, key2, KEY_EXE);
+
+		if (testKey(key1, key2, KEY_NEGATIVE)) {
+			Debug_Printf(0, 2, true, 0, "Rand: %02x", GetRandByte());
+			LCD_Refresh();
+		}
+
+		if (testKey(key1, key2, KEY_CLEAR)) return -1;
+		return 0;
+	}
+
+	uint8_t GetRandByte() {
+		SEED ^= SEED << 13;
+		SEED ^= SEED >> 17;
+		SEED ^= SEED << 5;
+		return (uint8_t)(SEED & 0xFF);
+	}
+
 private:
+	uint32_t SEED = 0xACE1u;
 	const uint16_t START_ADDRESS = 0x200;
+	const uint16_t FONTSET_START_ADDRESS = 0x50;
+	static const unsigned int FONTSET_SIZE = 80;
+	static const uint8_t fontset[FONTSET_SIZE];
 
     uint8_t registers[16]; // V0 - VF
     uint8_t * mem; // pointer to mem
@@ -184,6 +232,25 @@ private:
 	void execute() {
 		return;
 	}
+};
+
+const uint8_t Chip8::fontset[Chip8::FONTSET_SIZE] = {
+	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+	0x20, 0x60, 0x20, 0x20, 0x70, // 1
+	0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+	0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+	0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+	0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+	0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+	0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+	0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+	0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+	0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+	0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+	0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
 extern "C"
@@ -241,9 +308,7 @@ void main() {
 
 	while (true) {
 		chip8.Cycle();
-		uint32_t key1, key2;
-		getKey(&key1, &key2);
-		if (testKey(key1, key2, KEY_CLEAR)) {
+		if (chip8.TestKeys() < 0) {
 			break;
 		}
 	}
