@@ -200,8 +200,6 @@ public:
 	int LoadROM(const char * path) {
 		uint16_t size;
 		Roms::loadRom(path, mem + START_ADDRESS, mem_size - START_ADDRESS, &size);
-		Debug_Printf(0, 1, true, 0, "Loaded size: %d", size);
-		LCD_Refresh();
 		if (size == 0) {
 			return -1;
 		} else {
@@ -619,20 +617,28 @@ const uint8_t Chip8::fontset[Chip8::FONTSET_SIZE] = {
 };
 
 extern "C"
-void main() {
-	calcInit(); // backup screen and init some variables
-
+const Roms::rom_t * getRomDialog() {
 	ROMLoader loader;
 	GUIDialog::DialogResult result = loader.ShowDialog();
 
 	if (result != GUIDialog::DialogResultOK) {
+		return nullptr;
+	}
+
+	return loader.GetSelectedROM();
+}
+
+extern "C"
+void main() {
+	calcInit(); // backup screen and init some variables
+
+	const Roms::rom_t * selectedROM = getRomDialog();
+	if (selectedROM == nullptr) {
 		Roms::freeRomList();
 		calcEnd();
 		return;
 	}
-
-	const Roms::rom_t * selectedROM = loader.GetSelectedROM();
-
+	
 	Chip8 chip8;
 
 	if (!chip8.init_success) {
@@ -650,9 +656,6 @@ void main() {
 		calcEnd();
 		return;
 	}
-
-	Debug_Printf(0, 0, true, 0, "Loading ROM: %s", selectedROM->path);
-	LCD_Refresh();
 
 	int ret = chip8.LoadROM(selectedROM->path);
 	if (ret < 0) {
