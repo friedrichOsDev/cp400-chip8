@@ -11,7 +11,7 @@ namespace Roms {
         int count;
     } romlist_t;
 
-    const int MAX_ROMS = 64;
+    const int MAX_ROMS = 256;
 
     void loadRomList();
     void freeRomList();
