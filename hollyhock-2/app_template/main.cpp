@@ -8,6 +8,7 @@
 #include <sdk/os/string.hpp>
 #include <sdk/os/debug.hpp>
 #include <sdk/os/gui.hpp>
+#include <sdk/os/input.hpp>
 #include "roms.hpp"
 
 APP_NAME("CHIP-8 Emulator")
@@ -49,7 +50,8 @@ public:
 		Roms::romlist_t romList = Roms::getRomList();
 
 		for (int i = 0; i < romList.count; i++) {
-			romMenu.AddMenuItem(*(new GUIDropDownMenuItem(romList.roms[i].name, i + 1, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft)));
+			GUIDropDownMenuItem item(romList.roms[i].name, i + 1, GUIDropDownMenuItem::FlagEnabled | GUIDropDownMenuItem::FlagTextAlignLeft);
+			romMenu.AddMenuItem(item);
 		}
 		
 		romMenu.SetScrollBarVisibility(GUIDropDownMenu::ScrollBarVisibleWhenRequired);
@@ -58,6 +60,8 @@ public:
 		AddElement(loadBtn);
 		AddElement(cancelBtn);
 	}
+
+	virtual ~ROMLoader() {}
 
     virtual int OnEvent(GUIDialog_Wrapped *dialog, GUIDialog_OnEvent_Data *event) {
         if (event->GetEventID() == ROM_MENU_EVENT_ID && (event->type & 0xF) == 0xD) {
@@ -85,8 +89,9 @@ private:
 class Chip8 {
 public:
 	bool init_success;
+	int ticks_to_wait_per_loop = 100000;
 
-    Chip8() {
+    Chip8() : mem(nullptr), display(nullptr) {
 		init_success = true;
 
 		for (int i = 0; i < 16; i++) {
@@ -184,6 +189,13 @@ public:
 		tableF[0x33] = &Chip8::OP_Fx33;
 		tableF[0x55] = &Chip8::OP_Fx55;
 		tableF[0x65] = &Chip8::OP_Fx65;
+
+		LCD_GetSize(&LCD_WIDTH, &LCD_HEIGHT);
+		ResetDirty();
+	}
+
+	~Chip8() {
+		FreeMem();
 	}
 
 	void FreeMem() {
@@ -207,51 +219,23 @@ public:
 		}	
 	}
 
-    void Cycle() {
-		// Fetch
-		opcode = (mem[pc] << 8u) | mem[pc + 1];
-		pc += 2;
-
-		// Decode & Execute
-		((*this).*(table[(opcode & 0xF000u) >> 12u]))();
-
-		// Update timers
+	void UpdateTimers() {
 		if (delay_timer > 0) {
 			--delay_timer;
 		}
 	}
 
-	int TestKeys() {
-		uint32_t key1, key2;
-		getKey(&key1, &key2);
-
-		keypad[0x0] = testKey(key1, key2, KEY_7);
-		keypad[0x1] = testKey(key1, key2, KEY_8);
-		keypad[0x2] = testKey(key1, key2, KEY_9);
-		keypad[0x3] = testKey(key1, key2, KEY_MULTIPLY);
-
-		keypad[0x4] = testKey(key1, key2, KEY_4);
-		keypad[0x5] = testKey(key1, key2, KEY_5);
-		keypad[0x6] = testKey(key1, key2, KEY_6);
-		keypad[0x7] = testKey(key1, key2, KEY_SUBTRACT);
-
-		keypad[0x8] = testKey(key1, key2, KEY_1);
-		keypad[0x9] = testKey(key1, key2, KEY_2);
-		keypad[0xA] = testKey(key1, key2, KEY_3);
-		keypad[0xB] = testKey(key1, key2, KEY_ADD);
-
-		keypad[0xC] = testKey(key1, key2, KEY_0);
-		keypad[0xD] = testKey(key1, key2, KEY_DOT);
-		keypad[0xE] = testKey(key1, key2, KEY_EXP);
-		keypad[0xF] = testKey(key1, key2, KEY_EXE);
-
-		if (testKey(key1, key2, KEY_NEGATIVE)) {
-			Debug_Printf(0, 2, true, 0, "Rand: %02x", GetRandByte());
-			LCD_Refresh();
+    void Cycle() {
+		// Fetch
+		if (pc >= mem_size - 1) {
+			pc = START_ADDRESS;
 		}
 
-		if (testKey(key1, key2, KEY_CLEAR)) return -1;
-		return 0;
+		opcode = (mem[pc] << 8u) | mem[pc + 1];
+		pc += 2;
+
+		// Decode & Execute
+		((*this).*(table[(opcode & 0xF000u) >> 12u]))();
 	}
 
 	uint8_t GetRandByte() {
@@ -261,30 +245,57 @@ public:
 		return (uint8_t)(SEED & 0xFF);
 	}
 
-	void SyncWithPlatform() {
-		for (int y = 0; y < 32; y++) {
-			for (int x = 0; x < 64; x++) {
-				uint8_t pixel = display[y * 64 + x];
-				if (pixel) {
+	int SyncWithPlatform() {
+		// keys
+		uint32_t key1, key2;
+		getKey(&key1, &key2);
+
+		keypad[0x1] = testKey(key1, key2, KEY_7);
+		keypad[0x2] = testKey(key1, key2, KEY_8);
+		keypad[0x3] = testKey(key1, key2, KEY_9);
+		keypad[0xC] = testKey(key1, key2, KEY_MULTIPLY);
+
+		keypad[0x4] = testKey(key1, key2, KEY_4);
+		keypad[0x5] = testKey(key1, key2, KEY_5);
+		keypad[0x6] = testKey(key1, key2, KEY_6);
+		keypad[0xD] = testKey(key1, key2, KEY_SUBTRACT);
+
+		keypad[0x7] = testKey(key1, key2, KEY_1);
+		keypad[0x8] = testKey(key1, key2, KEY_2);
+		keypad[0x9] = testKey(key1, key2, KEY_3);
+		keypad[0xE] = testKey(key1, key2, KEY_ADD);
+
+		keypad[0xA] = testKey(key1, key2, KEY_0);
+		keypad[0x0] = testKey(key1, key2, KEY_DOT);
+		keypad[0xB] = testKey(key1, key2, KEY_EXP);
+		keypad[0xF] = testKey(key1, key2, KEY_EXE);
+
+		// display
+		if (dirty_flag) {
+			for (uint8_t y = display_dirty_y1; y <= display_dirty_y2; y++) {
+				for (uint8_t x = display_dirty_x1; x <= display_dirty_x2; x++) {
+					uint8_t pixel = display[y * 64 + x];
+					uint16_t color = (pixel == 0xFF) ? 0xFFFF : 0x0000;
+					
 					for (int sy = 0; sy < LCD_PIXEL_SCALE; sy++) {
-						for (int sx = 0; sx < LCD_PIXEL_SCALE; sx++) {
-							setPixel(x * LCD_PIXEL_SCALE + sx, y * LCD_PIXEL_SCALE + sy, 0);
-						}
-					}
-				} else {
-					for (int sy = 0; sy < LCD_PIXEL_SCALE; sy++) {
-						for (int sx = 0; sx < LCD_PIXEL_SCALE; sx++) {
-							setPixel(x * LCD_PIXEL_SCALE + sx, y * LCD_PIXEL_SCALE + sy, 0xFFFF);
-						}
+						if ((y * LCD_PIXEL_SCALE + sy) >= LCD_HEIGHT) continue;
+						memset((void*)((uintptr_t)vram + (y * LCD_PIXEL_SCALE + sy) * LCD_WIDTH * 2 + (x * LCD_PIXEL_SCALE) * 2), color, LCD_PIXEL_SCALE * 2);
 					}
 				}
 			}
+			LCD_Refresh();
+			ResetDirty();
 		}
-		LCD_Refresh();
+
+		// exit, if KEY_CLEAR is pressed
+		if (testKey(key1, key2, KEY_CLEAR)) return -1;
+		return 0;
 	}
 
 private:
 	int LCD_PIXEL_SCALE = 4;
+	int LCD_WIDTH;
+	int LCD_HEIGHT;
 	uint32_t SEED = 0xACE1u;
 	const uint16_t START_ADDRESS = 0x200;
 	const uint16_t FONTSET_START_ADDRESS = 0x50;
@@ -311,31 +322,66 @@ private:
 	Chip8Func tableE[0xE + 1];
 	Chip8Func tableF[0x65 + 1];
 
+	uint16_t display_dirty_x1, display_dirty_y1, display_dirty_x2, display_dirty_y2;
+	bool dirty_flag;
+
+	void ResetDirty() {
+		display_dirty_x1 = 64;
+		display_dirty_y1 = 32;
+		display_dirty_x2 = 0;
+		display_dirty_y2 = 0;
+		dirty_flag = false;
+	}
+
+	void MarkFullScreenDirty() {
+		display_dirty_x1 = 0;
+		display_dirty_y1 = 0;
+		display_dirty_x2 = 63;
+		display_dirty_y2 = 31;
+		dirty_flag = true;
+	}
+
+	void MarkDirty(uint8_t x, uint8_t y) {
+		if (x >= 64 || y >= 32) return;
+		if (x < display_dirty_x1) display_dirty_x1 = x;
+		if (x > display_dirty_x2) display_dirty_x2 = x;
+		if (y < display_dirty_y1) display_dirty_y1 = y;
+		if (y > display_dirty_y2) display_dirty_y2 = y;
+		dirty_flag = true;
+	}
+
 	void Table0() {
-		((*this).*(table0[opcode & 0x000Fu]))();
+		uint8_t op = opcode & 0x000Fu;
+		if (op <= 0xE) ((*this).*(table0[op]))();
 	}
 
 	void Table8() {
-		((*this).*(table8[opcode & 0x000Fu]))();
+		uint8_t op = opcode & 0x000Fu;
+		if (op <= 0xE) ((*this).*(table8[op]))();
 	}
 
 	void TableE() {
-		((*this).*(tableE[opcode & 0x000Fu]))();
+		uint8_t op = opcode & 0x000Fu;
+		if (op <= 0xE) ((*this).*(tableE[op]))();
 	}
 
 	void TableF() {
-		((*this).*(tableF[opcode & 0x00FFu]))();
+		uint8_t op = opcode & 0x00FFu;
+		if (op <= 0x65) ((*this).*(tableF[op]))();
 	}
 	
 	void OP_NULL() {}
 
 	void OP_00E0() {
 		memset(display, 0, display_size);
+		MarkFullScreenDirty();
 	}
 
 	void OP_00EE() {
-		--sp;
-		pc = stack[sp];
+		if (sp > 0) {
+			--sp;
+			pc = stack[sp];
+		}
 	}
 
 	void OP_1nnn() {
@@ -345,8 +391,10 @@ private:
 
 	void OP_2nnn() {
 		uint16_t address = opcode & 0x0FFFu;
-		stack[sp] = pc;
-		++sp;
+		if (sp < 16) {
+			stack[sp] = pc;
+			++sp;
+		}
 		pc = address;
 	}
 
@@ -438,7 +486,7 @@ private:
 	}
 
 	void OP_8xy6() {
-		uint8_t Vx = (opcode & 0x0F000u) >> 8u;
+		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
 
 		// Save least significant bit in VF
 		registers[0xF] = (registers[Vx] & 0x1u);
@@ -505,9 +553,13 @@ private:
 		registers[0xF] = 0;
 
 		for (unsigned int row = 0; row < height; row++) {
-			uint8_t spriteByte = mem[index + row];
+			if (yPos + row >= 32) continue;
+
+			uint8_t spriteByte = (index + row < mem_size) ? mem[index + row] : 0;
 
 			for (unsigned int col = 0; col < 8; col++) {
+				if (xPos + col >= 64) continue;
+
 				uint8_t spritePixel = spriteByte & (0x80u >> col);
 				uint8_t *screenPixel = &display[(yPos + row) * 64 + (xPos + col)];
 
@@ -519,6 +571,7 @@ private:
 
 					// Effectively XOR with the sprite pixel
 					*screenPixel ^= 0xFF;
+					MarkDirty(xPos + col, yPos + row);
 				}
 			}
 		}
@@ -528,7 +581,7 @@ private:
 		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
 		uint8_t key = registers[Vx];
 
-		if (keypad[key]) {
+		if (key < 16 && keypad[key]) {
 			pc += 2;
 		}
 	}
@@ -537,7 +590,7 @@ private:
 		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
 		uint8_t key = registers[Vx];
 
-		if (!keypad[key]) {
+		if (key < 16 && !keypad[key]) {
 			pc += 2;
 		}
 	}
@@ -591,6 +644,8 @@ private:
 		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
 		uint8_t value = registers[Vx];
 
+		if (index + 2 >= mem_size) return;
+
 		// Ones-place
 		mem[index + 2] = value % 10;
 		value /= 10;
@@ -606,6 +661,8 @@ private:
 	void OP_Fx55() {
 		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
 
+		if (index + Vx >= mem_size) return;
+
 		for (uint8_t i = 0; i <= Vx; ++i) {
 			mem[index + i] = registers[i];
 		}
@@ -613,6 +670,8 @@ private:
 
 	void OP_Fx65() {
 		uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+
+		if (index + Vx >= mem_size) return;
 
 		for (uint8_t i = 0; i <= Vx; ++i) {
 			registers[i] = mem[index + i];
@@ -641,19 +700,23 @@ const uint8_t Chip8::fontset[Chip8::FONTSET_SIZE] = {
 
 extern "C"
 const Roms::rom_t * getRomDialog() {
-	ROMLoader loader;
-	GUIDialog::DialogResult result = loader.ShowDialog();
+	ROMLoader *loader = new ROMLoader();
+	GUIDialog::DialogResult result = loader->ShowDialog();
 
+	const Roms::rom_t * selection = nullptr;
 	if (result != GUIDialog::DialogResultOK) {
-		return nullptr;
+		selection = nullptr;
+	} else {
+		selection = loader->GetSelectedROM();
 	}
 
-	return loader.GetSelectedROM();
+	delete loader;
+	return selection;
 }
 
 extern "C"
 void main() {
-	calcInit(); // backup screen and init some variables
+	calcInit();
 
 	const Roms::rom_t * selectedROM = getRomDialog();
 	if (selectedROM == nullptr) {
@@ -664,50 +727,46 @@ void main() {
 
 	fillScreen(0x0000);
 	
-	Chip8 chip8;
-
-	if (!chip8.init_success) {
-		Debug_Printf(0, 10, true, 0, "Failed to initialize Chip8");
-		LCD_Refresh();
-		while (true) {
-			uint32_t key1, key2;
-			getKey(&key1, &key2);
-			if (testKey(key1, key2, KEY_CLEAR)) {
-				break;
-			}
-		}
+	Chip8 *chip8 = new Chip8();
+	if (chip8 == nullptr) {
 		Roms::freeRomList();
-		chip8.FreeMem();
 		calcEnd();
 		return;
 	}
 
-	int ret = chip8.LoadROM(selectedROM->path);
-	if (ret < 0) {
-		Debug_Printf(0, 11, true, 0, "Failed to load ROM: %s", selectedROM->path);
-		LCD_Refresh();
-		while (true) {
-			uint32_t key1, key2;
-			getKey(&key1, &key2);
-			if (testKey(key1, key2, KEY_CLEAR)) {
-				break;
-			}
-		}
+	if (!chip8->init_success) {
 		Roms::freeRomList();
-		chip8.FreeMem();
+		delete chip8;
+		calcEnd();
+		return;
+	}
+
+	int ret = chip8->LoadROM(selectedROM->path);
+	if (ret < 0) {
+		Debug_Printf(0, 0, true, 0, "Failed to load ROM: %s", selectedROM->path);
+		LCD_Refresh();
+		Debug_WaitKey();
+		Roms::freeRomList();
+		delete chip8;
 		calcEnd();
 		return;
 	}
 
 	while (true) {
-		chip8.Cycle();
-		if (chip8.TestKeys() < 0) {
-			break;
+		for (int i = 0; i < 12; i++) {
+			chip8->Cycle();
 		}
-		chip8.SyncWithPlatform();
+
+		chip8->UpdateTimers();
+		if (chip8->SyncWithPlatform() < 0) break;
+
+		// we need to some how wait 16.6ms
+		for (volatile int j = 0; j < chip8->ticks_to_wait_per_loop; j++) {
+			asm volatile("nop");
+		}
 	}
 
 	Roms::freeRomList();
-	chip8.FreeMem();
-	calcEnd(); // restore screen and do stuff
+	delete chip8;
+	calcEnd();
 }

@@ -16,6 +16,5 @@ namespace Roms {
     void loadRomList();
     void freeRomList();
     romlist_t getRomList();
-    void getRomSize(const char * path, uint16_t *size);
     void loadRom(const char * path, uint8_t *buffer, uint16_t max_size, uint16_t *size);
 }
